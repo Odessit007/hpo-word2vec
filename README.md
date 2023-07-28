@@ -70,6 +70,19 @@ compared to Pipenv.
 Please, check the [installation docs](#https://pdm.fming.dev/latest/#recommended-installation-method) for your 
 platform.
 
+```bash
+pdm add {packge_1, ..., package_n}  # Install more than one package :)
+  -d: add packages to dev dependencies
+  -G {group_name}: add packages to a specific group
+pdm init  # Create a new project
+pdm info  # Get information about the current project
+pdm install  # Check the project file for changes, update the lock file if needed, then sync
+pdm list  # List installed packages
+pdm sync  # Install packages from from the lockfile
+  --clean: remove packages no longer in the lockfile
+pdm update  # Update the lock file, then sync
+```
+
 
 
 # The plan
