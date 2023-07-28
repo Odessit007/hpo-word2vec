@@ -1,0 +1,15 @@
+[project]
+name = ""
+version = ""
+description = ""
+authors = [
+    {name = "Odessit007", email = "igor.vustyanyuk@gmail.com"},
+]
+dependencies = [
+    "prefect>=2.11.1",
+    "obonet>=1.0.0",
+]
+requires-python = ">=3.9"
+readme = "README.md"
+license = {text = "MIT"}
+
