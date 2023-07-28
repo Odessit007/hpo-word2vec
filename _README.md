@@ -1,8 +1,12 @@
-# hpo-word2vec
 ML Ops showcase -- Creating Word2Vec on HPO data for similarity search
 
+* [The problem](#problem)
+* [The data](#data)
+* [The instructions](#instructions)
 
 
+
+<a id="problem"></a>
 # The problem
 
 HPO is the [Human Phenotype Ontology](https://hpo.jax.org/app/). Slightly simplified, you can think of it as a hierarchy
@@ -20,6 +24,7 @@ treat term definition as one of its synonyms)
 
 
 
+<a id="data"></a>
 # The data
 
 For the purposes of this project, we'll work only with part of the HPO called "phenotypic abnormalities". Let's make
@@ -62,12 +67,15 @@ I hope you got the idea.
 
 
 
-# How to run?
+<a id="instructions"></a>
+# The instructions
+
+<a id="install-deps"></a>
 ## Installing dependencies
-I'm using [PDM](#https://pdm.fming.dev/latest/) to manage dependencies since it provides richer functionality
+I'm using [PDM](https://pdm.fming.dev/latest/) to manage dependencies since it provides richer functionality
 compared to Pipenv.
 
-Please, check the [installation docs](#https://pdm.fming.dev/latest/#recommended-installation-method) for your 
+Please, check the [installation docs](https://pdm.fming.dev/latest/#recommended-installation-method) for your 
 platform.
 
 ```bash
@@ -86,6 +94,10 @@ pdm update  # Update the lock file, then sync
 
 
 # The plan
+
+[] Data preparation: convert hp.obo file to the list of sentences and metadata.
+[] Model training: run experiments and tune hyperparameters with MLflow
+[] 
 
 The flow:
 [] Data flow:
