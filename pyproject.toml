@@ -16,6 +16,7 @@ dependencies = [
     "black>=23.7.0",
     "ruff>=0.0.280",
     "httpx>=0.24.1",
+    "prefect-aws>=0.3.6",
 ]
 requires-python = ">=3.9"
 readme = "README.md"

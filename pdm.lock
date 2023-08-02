@@ -6,7 +6,7 @@ groups = ["default", "dev"]
 cross_platform = true
 static_urls = false
 lock_version = "4.3"
-content_hash = "sha256:c7035d26c1b81eed6db0cd343ec8fe0e1f9ca0f68c43b88e1fb88eb3a4125149"
+content_hash = "sha256:4f469b7b32cf5e6597dd91c6264ffc753de134dfe7f1a17789b39d9ab66cdd42"
 
 [[package]]
 name = "aiosqlite"
@@ -189,6 +189,36 @@ summary = "Fast, simple object-to-object and broadcast signaling"
 files = [
     {file = "blinker-1.6.2-py3-none-any.whl", hash = "sha256:c3d739772abb7bc2860abf5f2ec284223d9ad5c76da018234f6f50d6f31ab1f0"},
     {file = "blinker-1.6.2.tar.gz", hash = "sha256:4afd3de66ef3a9f8067559fb7a1cbe555c17dcbe15971b05d1b625c3e7abe213"},
+]
+
+[[package]]
+name = "boto3"
+version = "1.28.17"
+requires_python = ">= 3.7"
+summary = "The AWS SDK for Python"
+dependencies = [
+    "botocore<1.32.0,>=1.31.17",
+    "jmespath<2.0.0,>=0.7.1",
+    "s3transfer<0.7.0,>=0.6.0",
+]
+files = [
+    {file = "boto3-1.28.17-py3-none-any.whl", hash = "sha256:bca0526f819e0f19c0f1e6eba3e2d1d6b6a92a45129f98c0d716e5aab6d9444b"},
+    {file = "boto3-1.28.17.tar.gz", hash = "sha256:90f7cfb5e1821af95b1fc084bc50e6c47fa3edc99f32de1a2591faa0c546bea7"},
+]
+
+[[package]]
+name = "botocore"
+version = "1.31.17"
+requires_python = ">= 3.7"
+summary = "Low-level, data-driven core of boto 3."
+dependencies = [
+    "jmespath<2.0.0,>=0.7.1",
+    "python-dateutil<3.0.0,>=2.1",
+    "urllib3<1.27,>=1.25.4",
+]
+files = [
+    {file = "botocore-1.31.17-py3-none-any.whl", hash = "sha256:6ac34a1d34aa3750e78b77b8596617e2bab938964694d651939dba2cbde2c12b"},
+    {file = "botocore-1.31.17.tar.gz", hash = "sha256:396459065dba4339eb4da4ec8b4e6599728eb89b7caaceea199e26f7d824a41c"},
 ]
 
 [[package]]
@@ -994,6 +1024,16 @@ files = [
 ]
 
 [[package]]
+name = "jmespath"
+version = "1.0.1"
+requires_python = ">=3.7"
+summary = "JSON Matching Expressions"
+files = [
+    {file = "jmespath-1.0.1-py3-none-any.whl", hash = "sha256:02e2e4cc71b5bcab88332eebf907519190dd9e6e82107fa7f83b1003a6252980"},
+    {file = "jmespath-1.0.1.tar.gz", hash = "sha256:90261b206d6defd58fdd5e85f478bf633a2901798906be2ad389150c5c60edbe"},
+]
+
+[[package]]
 name = "joblib"
 version = "1.3.1"
 requires_python = ">=3.7"
@@ -1380,6 +1420,26 @@ dependencies = [
 files = [
     {file = "mlflow-2.5.0-py3-none-any.whl", hash = "sha256:981fcb3480ca7383b47e22b5e4c726d21e2c87fb4035e5a1b57574736c665576"},
     {file = "mlflow-2.5.0.tar.gz", hash = "sha256:f992ae8ea9c73502344baf48c4ec447aa9efbfa8965bc090868e6163234f4eb0"},
+]
+
+[[package]]
+name = "mypy-boto3-s3"
+version = "1.28.16"
+requires_python = ">=3.7"
+summary = "Type annotations for boto3.S3 1.28.16 service generated with mypy-boto3-builder 7.17.1"
+files = [
+    {file = "mypy-boto3-s3-1.28.16.tar.gz", hash = "sha256:4e55fdad729b6e6f45211e354bd1a0a745a565fe9d1e462737f775c28849cfb5"},
+    {file = "mypy_boto3_s3-1.28.16-py3-none-any.whl", hash = "sha256:855f7848186c45adbd3c474fec2d75db17f4cd7200c0a2235473250454ec4686"},
+]
+
+[[package]]
+name = "mypy-boto3-secretsmanager"
+version = "1.28.16"
+requires_python = ">=3.7"
+summary = "Type annotations for boto3.SecretsManager 1.28.16 service generated with mypy-boto3-builder 7.17.1"
+files = [
+    {file = "mypy-boto3-secretsmanager-1.28.16.tar.gz", hash = "sha256:07f443b31d2114ac363cfbdbc5f4b97934ca48fb99734bbd06d5c39bce244b83"},
+    {file = "mypy_boto3_secretsmanager-1.28.16-py3-none-any.whl", hash = "sha256:05508c3a96d96e482e5aff21b508319a1911e6662aea5be96aa7f7089b8dbfd4"},
 ]
 
 [[package]]
@@ -1778,6 +1838,23 @@ dependencies = [
 files = [
     {file = "prefect-2.11.1-py3-none-any.whl", hash = "sha256:413efa3178f5b5cab059c192d48016d0bf301eb4511ccc7667446b25cf419ebc"},
     {file = "prefect-2.11.1.tar.gz", hash = "sha256:d226ba52206bdb19a100def5a1f18409946bf85ae77281f4d07aceae835cef65"},
+]
+
+[[package]]
+name = "prefect-aws"
+version = "0.3.6"
+requires_python = ">=3.7"
+summary = "Prefect collection of tasks and subflows to integrate with AWS"
+dependencies = [
+    "boto3>=1.24.53",
+    "botocore>=1.27.53",
+    "mypy-boto3-s3>=1.24.94",
+    "mypy-boto3-secretsmanager>=1.26.49",
+    "prefect>=2.10.11",
+]
+files = [
+    {file = "prefect-aws-0.3.6.tar.gz", hash = "sha256:5d1cd8dd92163bdf6b136a56ceb0c6c96fed46471d60b1aceab5e1675f18e508"},
+    {file = "prefect_aws-0.3.6-py3-none-any.whl", hash = "sha256:52d23f0269a27c34c9bf77789e543a948d0046cbe236fca5d54beedb9788a791"},
 ]
 
 [[package]]
@@ -2364,6 +2441,19 @@ files = [
     {file = "ruff-0.0.280-py3-none-win_amd64.whl", hash = "sha256:4a7d52457b5dfcd3ab24b0b38eefaead8e2dca62b4fbf10de4cd0938cf20ce30"},
     {file = "ruff-0.0.280-py3-none-win_arm64.whl", hash = "sha256:b7de5b8689575918e130e4384ed9f539ce91d067c0a332aedef6ca7188adac2d"},
     {file = "ruff-0.0.280.tar.gz", hash = "sha256:581c43e4ac5e5a7117ad7da2120d960a4a99e68ec4021ec3cd47fe1cf78f8380"},
+]
+
+[[package]]
+name = "s3transfer"
+version = "0.6.1"
+requires_python = ">= 3.7"
+summary = "An Amazon S3 Transfer Manager"
+dependencies = [
+    "botocore<2.0a.0,>=1.12.36",
+]
+files = [
+    {file = "s3transfer-0.6.1-py3-none-any.whl", hash = "sha256:3c0da2d074bf35d6870ef157158641178a4204a6e689e82546083e31e0311346"},
+    {file = "s3transfer-0.6.1.tar.gz", hash = "sha256:640bb492711f4c0c0905e1f62b6aaeb771881935ad27884852411f8e9cacbca9"},
 ]
 
 [[package]]
