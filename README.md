@@ -78,17 +78,13 @@ compared to Pipenv.
 Please, check the [installation docs](https://pdm.fming.dev/latest/#recommended-installation-method) for your 
 platform.
 
-*N.B.* If you want to work "from source", you might
-
 
 
 # The plan
 
 [] Data preparation: convert hp.obo file to the list of sentences and metadata.
 [] Model training: run experiments and tune hyperparameters with MLflow
-[] Add model to registry
-[] Implement model deployment
-
+[] 
 
 The flow:
 [] Data flow:
