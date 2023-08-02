@@ -5,7 +5,7 @@ rm -rf venv/
 rm .pdm-python pyproject.toml pdm.lock
 
 echo "Creating new virtual environment"
-python3.10 -m venv venv
+$1 -m venv venv
 
 echo "Initializing PDM project"
 pdm init
