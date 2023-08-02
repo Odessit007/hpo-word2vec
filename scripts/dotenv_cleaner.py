@@ -12,7 +12,7 @@ from pathlib import Path
 
 keys_to_keep_vals = ['HPO_OBO_PATH', 'LOCAL_ARTIFACTS_DIR', 'MODE', 'PREFECT_API_URL', 'REMOTE_ARTIFACTS_DIR']
 config_root_dir = Path('config/')
-files_with_credentials = ['.env.aws', '.env.prod']
+files_with_credentials = ['.env.aws', '.env.cloud']
 for file in files_with_credentials:
     input_path = config_root_dir / file
     output_path = input_path.with_name(file + '.template')
