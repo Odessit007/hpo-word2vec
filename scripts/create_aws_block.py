@@ -9,7 +9,8 @@ from prefect_aws import AwsCredentials
 logger = logging.getLogger(Path(__file__).name)
 logger.setLevel(logging.INFO)
 logger.info('Loading environment variables')
-dotenv.load_dotenv(f'config/.env.aws', verbose=True, override=True)
+dotenv.load_dotenv('config/.env.aws', verbose=True, override=True)
+dotenv.load_dotenv('config/.env.prod', verbose=True, override=True)
 block_name = os.environ['AWS_BLOCK_NAME']
 try:
     aws_credentials_block = AwsCredentials.load(block_name)
