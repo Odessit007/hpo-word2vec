@@ -1,38 +1,33 @@
 from collections import defaultdict
+from copy import copy
 from copy import deepcopy
-from datetime import datetime
+from itertools import chain
 import os
 from pathlib import Path
 import pickle
 import re
+import string
 from typing import Any
+from typing import Dict
 from typing import List
-from typing import Optional
 
 import httpx
 import networkx as nx
 import obonet
-from prefect_aws import AwsCredentials
 from prefect import flow
 from prefect import get_run_logger
 from prefect import task
 import tqdm
 
+from hpw.s3_interaction import upload_artifacts_to_s3
 
+
+CUSTOM_PUNCTUATION = string.punctuation.replace('-', '').replace('/', '')
+STOP_WORDS = {'a', 'abnormal', 'abnormality', 'an', 'and', 'are', 'as', 'at',
+              'by', 'from', 'in', 'is', 'level', 'of', 'on', 'or', 'so',
+              'such', 'that', 'the', 'to', 'which', 'with'}
 HPO_URL = 'http://purl.obolibrary.org/obo/hp.obo'
 ROOT = 'HP:0000118'
-
-
-@task(name='Upload to S3')
-def upload_to_s3(local_path: Path, run_id: str) -> Optional[Path]:
-    aws_block = AwsCredentials.load('aws-credentials')
-    s3_client = aws_block.get_s3_client()
-    remote_dir = os.environ['REMOTE_ARTIFACTS_DIR']
-    bucket_name = os.environ['S3_BUCKET']
-    remote_filename = local_path.name
-    target_path = Path(remote_dir) / run_id / remote_filename
-    s3_client.upload_file(str(local_path), bucket_name, str(target_path))
-    return target_path
 
 
 @task(name='Set up local directories')
@@ -105,8 +100,8 @@ def _get_texts_from_node(node: dict, statistics: dict) -> List[str]:
     return texts
 
 
-@task(name='Extract text data')
-def get_texts(graph: nx.MultiDiGraph) -> dict:
+@task(name='Extract texts')
+def extract_texts(graph: nx.MultiDiGraph) -> tuple:
     hpo_to_texts = defaultdict(set)
     text_to_hpo = {}
     statistics = {'n_skipped_obsolete': 0, 'n_skipped_asd': 0}
@@ -120,11 +115,9 @@ def get_texts(graph: nx.MultiDiGraph) -> dict:
     logger.info(f'# of skipped ASD entries: {statistics["n_skipped_asd"]}')
     logger.info(f'# of HPO terms with texts: {len(hpo_to_texts)}')
     logger.info(f'# of sentences (names, synonyms, definitions): {len(text_to_hpo)}')
-    artifacts = {'hpo_to_texts': hpo_to_texts, 'text_to_hpo': text_to_hpo}
-    return artifacts
+    return hpo_to_texts, text_to_hpo
 
 
-@task(name='Pickle artifact')
 def pickle_artifact(artifact: Any, local_dir: str, filename: str) -> Path:
     target_path = Path(local_dir) / filename
     target_path = target_path.with_suffix('.pkl')
@@ -133,23 +126,65 @@ def pickle_artifact(artifact: Any, local_dir: str, filename: str) -> Path:
     return target_path
 
 
+def tokenizer(
+        text: str,
+        use_stop_words: bool = True,
+        split_words: bool = True
+):
+    stop_words = STOP_WORDS if use_stop_words else set()
+    stop_words.add('')
+    punctuation = CUSTOM_PUNCTUATION if split_words else string.punctuation
+    words = text.strip().lower().translate(str.maketrans('', '', punctuation)).split(' ')
+    tokens = []
+    for word in words:
+        if word in stop_words:
+            continue
+        tokens.append(word)
+        if not split_words:
+            continue
+        if '-' in word or '/' in word:
+            subwords = [sw for sw in chain.from_iterable(s.split('-') for s in word.split('/')) if sw]
+            tokens.extend(subwords)
+
+    if split_words:
+        prefixes = ['hyper', 'hypo', 'micro', 'macro']
+        current_tokens = copy(tokens)
+        for token in current_tokens:
+            for prefix in prefixes:
+                if token.startswith(prefix):
+                    tokens.append(prefix)
+                    tokens.append(token[len(prefix):])
+                    break
+    tokens = [token for token in tokens if token not in stop_words]
+    return tokens
+
+
+@task(name='Tokenize texts', task_run_name='Tokenize texts (use_stop_words={stop}; split_into_subwords={split})')
+def _tokenize_texts(hpo_to_texts: Dict[str, List[str]], stop: bool, split: bool):
+    ans = {}
+    for hpo_id, texts in hpo_to_texts.items():
+        ans[hpo_id] = [tokenizer(text, stop, split) for text in texts]
+    return ans
+
+
 @flow(name='Prepare data')
 def prepare_data(
         local_dir: str = '/opt/data/hpo_w2v/',
         force_download: bool = False,
         verify_ssl: bool = True,
-        save_to_s3: bool = False,
-        run_id: Optional[str] = None
 ):
-    if run_id is None:
-        run_id = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     set_up_local_directories(local_dir)
-    hpo_file = download_hpo_file(local_dir, force_download, verify_ssl)
-    if save_to_s3:
-        upload_to_s3(hpo_file, run_id)
-    graph = get_hpo_graph(hpo_file)
-    artifacts = get_texts(graph)
-    for name, artifact in artifacts.items():
-        local_artifact_path = pickle_artifact(artifact, local_dir, name)
-        if save_to_s3:
-            upload_to_s3(local_artifact_path, run_id)
+    hpo_file_path = download_hpo_file(local_dir, force_download, verify_ssl)
+    graph = get_hpo_graph(hpo_file_path)
+    hpo_to_texts, text_to_hpo = extract_texts(graph)
+    artifacts_data = {
+        'hpo_to_texts': pickle_artifact(hpo_to_texts, local_dir, 'hpo_to_texts'),
+        'text_to_hpo': pickle_artifact(hpo_to_texts, local_dir, 'text_to_hpo'),
+    }
+    for stop in [True, False]:
+        for split in [True, False]:
+            name = f'tokens__stop_words={int(stop)}__subwords={int(split)}'
+            tokens = _tokenize_texts(hpo_to_texts, stop, split)
+            artifacts_data[name] = pickle_artifact(tokens, local_dir, name)
+    if os.environ.get('MODE') == 'cloud':
+        upload_artifacts_to_s3(artifacts_data)
