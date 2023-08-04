@@ -162,5 +162,5 @@ cython_debug/
 .idea/
 .DS_Store
 .env.aws
-.env.prod
+.env.cloud
 _*

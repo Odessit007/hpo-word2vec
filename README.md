@@ -79,6 +79,31 @@ Please, check the [installation docs](https://pdm.fming.dev/latest/#recommended-
 platform.
 
 
+# Running flows
+`python scripts/`
+
+The project supports two modes:
+* cloud:
+  * data artifacts are stored in AWS S3 bucket
+  * experiments are tracked and models are registered in W&B Cloud
+  * data flows are deployed to Prefect Cloud
+  * Docker image for inference app is stored in AWS ECR
+  * (?) inference app runs in AWS Lightsail and saves results to AWS RDS
+  * (?) Evidently monitoring flow uses AWS RDS
+* local:
+  * data artifacts are stored in local directory
+  * experiments are tracked and models are registered with a local W&B server
+  * data flows are deployed to local Prefect server
+  * Docker image for inference app is stored locally
+  * inference app runs locally using Docker Desktop and saves results to SQLite
+  * (?) Evidently monitoring flow uses SQLite
+
+Both modes also have `prod` and `test` sub-modes.
+* The `local test` mode is almost identical to the `local prod`, it just saves data to different location and DB
+that are managed by the testing code.
+* The `cloud test` mode uses `LocalStack` for S3 interaction and `testcontainers` to mock remote DB access and Docker runs.
+
+
 
 # The plan
 
