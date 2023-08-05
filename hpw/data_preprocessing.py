@@ -160,11 +160,11 @@ def tokenizer(
 
 
 @task(name='Tokenize texts', task_run_name='Tokenize texts (use_stop_words={stop}; split_into_subwords={split})')
-def _tokenize_texts(hpo_to_texts: Dict[str, List[str]], stop: bool, split: bool):
-    ans = {}
-    for hpo_id, texts in hpo_to_texts.items():
-        ans[hpo_id] = [tokenizer(text, stop, split) for text in texts]
-    return ans
+def tokenize_texts(hpo_to_texts: Dict[str, List[str]], stop: bool, split: bool):
+    return {
+        hpo_id: [tokenizer(text, stop, split) for text in texts]
+        for hpo_id, texts in hpo_to_texts.items()
+    }
 
 
 @flow(name='Prepare data')
@@ -177,14 +177,14 @@ def prepare_data(
     hpo_file_path = download_hpo_file(local_dir, force_download, verify_ssl)
     graph = get_hpo_graph(hpo_file_path)
     hpo_to_texts, text_to_hpo = extract_texts(graph)
-    artifacts_data = {
+    artifacts = {
         'hpo_to_texts': pickle_artifact(hpo_to_texts, local_dir, 'hpo_to_texts'),
         'text_to_hpo': pickle_artifact(hpo_to_texts, local_dir, 'text_to_hpo'),
     }
     for stop in [True, False]:
         for split in [True, False]:
             name = f'tokens__stop_words={int(stop)}__subwords={int(split)}'
-            tokens = _tokenize_texts(hpo_to_texts, stop, split)
-            artifacts_data[name] = pickle_artifact(tokens, local_dir, name)
+            hpo_to_tokens = tokenize_texts(hpo_to_texts, stop, split)
+            artifacts[name] = pickle_artifact(hpo_to_tokens, local_dir, name)
     if os.environ.get('MODE') == 'cloud':
-        upload_artifacts_to_s3(artifacts_data)
+        upload_artifacts_to_s3(artifacts)

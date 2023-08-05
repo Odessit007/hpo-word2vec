@@ -55,13 +55,14 @@ def _get_file_from_s3(
         bucket_name: Optional[str],
         target_path: Optional[Union[Path, str]],
         action: Literal['download', 'upload'],
+        logger=None,
 ) -> Path:
     if target_path is None:
         target_path = _construct_target_path(source_path, action)
     if bucket_name is None:
         bucket_name = os.environ['S3_BUCKET']
-    logger = get_run_logger()
-    logger.info(_get_log_message(source_path, bucket_name, target_path, action))
+    if logger:
+        logger.info(_get_log_message(source_path, bucket_name, target_path, action))
     s3_client = get_s3_client()
     if action == 'download':
         s3_client.download_file(bucket_name, str(source_path), str(target_path))
@@ -76,18 +77,18 @@ def download_from_s3(
         remote_path: Union[Path, str],
         bucket_name: Optional[str] = None,
         local_path: Optional[Union[Path, str]] = None,
+        logger=None,
 ) -> Path:
-    logger = get_run_logger()
-    logger.info('Trying to download to S3')
-    return _get_file_from_s3(remote_path, bucket_name, local_path, 'download')
+    return _get_file_from_s3(remote_path, bucket_name, local_path, 'download', logger)
 
 
 def upload_to_s3(
         local_path: Union[Path, str],
         bucket_name: Optional[str] = None,
         remote_path: Optional[Union[Path, str]] = None,
+        logger=None,
 ) -> Path:
-    return _get_file_from_s3(local_path, bucket_name, remote_path, 'upload')
+    return _get_file_from_s3(local_path, bucket_name, remote_path, 'upload', logger)
 
 
 def _s3_task_wrapper(name: str):
@@ -104,9 +105,10 @@ def download_artifacts_from_s3(artifacts_data: Dict[str, Union[Path, str]]):
     A utility function used to download remote files from S3. Bucket name is resolved via S3_BUCKET env. var.
     :param artifacts_data: dictionary of the form {"name": Path or 'path'}
     """
+    logger = get_run_logger()
     output_data = {}
     for name, local_artifact_path in artifacts_data.items():
-        output_data[name] = download_from_s3_task(local_artifact_path)
+        output_data[name] = download_from_s3_task(local_artifact_path, logger=logger)
     return output_data
 
 
@@ -116,7 +118,8 @@ def upload_artifacts_to_s3(artifacts_data: Dict[str, Union[Path, str]]):
     A utility function used to upload local files to S3. Bucket name is resolved via S3_BUCKET env. var.
     :param artifacts_data: dictionary of the form {"name": Path or 'path'}
     """
+    logger = get_run_logger()
     output_data = {}
     for name, local_artifact_path in artifacts_data.items():
-        output_data[name] = upload_to_s3_task(local_artifact_path)
+        output_data[name] = upload_to_s3_task(local_artifact_path, logger=logger)
     return output_data
