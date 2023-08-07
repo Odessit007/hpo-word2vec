@@ -46,7 +46,7 @@ def _get_log_message(
         target_path_repr = target_path
     else:
         source_path_repr = source_path
-        target_path_repr = f's3://{bucket_name}/{source_path}'
+        target_path_repr = f's3://{bucket_name}/{target_path}'
     return f'{action.title()}ing from {source_path_repr} to {target_path_repr}'
 
 

@@ -18,8 +18,9 @@ from prefect import flow
 from prefect import get_run_logger
 from prefect import task
 import tqdm
+import wandb
 
-from hpw.s3_interaction import upload_artifacts_to_s3
+from hpw.s3_interaction import upload_to_s3
 
 
 CUSTOM_PUNCTUATION = string.punctuation.replace('-', '').replace('/', '')
@@ -167,24 +168,34 @@ def tokenize_texts(hpo_to_texts: Dict[str, List[str]], stop: bool, split: bool):
     }
 
 
+@task(name='Create W&B dataset artifacts')
+def create_dataset_artifacts(dataset_name: str, path_in_s3: str | Path):
+    with wandb.init(
+            project=os.environ['WANDB_PROJECT'],
+            job_type='add_dataset',
+            name=f'Register dataset {dataset_name}.'
+    ) as run:
+        bucket = os.environ['S3_BUCKET']
+        artifact_path = 's3://' + str(Path(bucket) / path_in_s3)
+        artifact = wandb.Artifact(dataset_name, type='dataset')
+        artifact.add_reference(artifact_path)
+        run.log_artifact(artifact, aliases=['latest'])
+
+
 @flow(name='Prepare data')
 def prepare_data(
-        local_dir: str = '/opt/data/hpo_w2v/',
         force_download: bool = False,
         verify_ssl: bool = True,
 ):
+    local_dir = os.environ['LOCAL_ARTIFACTS_DIR']
     set_up_local_directories(local_dir)
     hpo_file_path = download_hpo_file(local_dir, force_download, verify_ssl)
     graph = get_hpo_graph(hpo_file_path)
-    hpo_to_texts, text_to_hpo = extract_texts(graph)
-    artifacts = {
-        'hpo_to_texts': pickle_artifact(hpo_to_texts, local_dir, 'hpo_to_texts'),
-        'text_to_hpo': pickle_artifact(hpo_to_texts, local_dir, 'text_to_hpo'),
-    }
+    hpo_to_texts, _ = extract_texts(graph)
     for stop in [True, False]:
         for split in [True, False]:
-            name = f'tokens__stop_words={int(stop)}__subwords={int(split)}'
+            dataset_name = f'tokens__stopwords_{int(stop)}__subwords_{int(split)}'
             hpo_to_tokens = tokenize_texts(hpo_to_texts, stop, split)
-            artifacts[name] = pickle_artifact(hpo_to_tokens, local_dir, name)
-    if os.environ.get('MODE') == 'cloud':
-        upload_artifacts_to_s3(artifacts)
+            local_path = pickle_artifact(hpo_to_tokens, local_dir, dataset_name)
+            s3_path = upload_to_s3(local_path, logger=get_run_logger())
+            create_dataset_artifacts(dataset_name, s3_path)

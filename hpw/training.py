@@ -4,11 +4,9 @@ from itertools import repeat
 import os
 import pickle
 from pathlib import Path
-from time import time
 from typing import Dict
 from typing import List
 from typing import Literal
-from typing import Union
 
 from gensim.models import FastText
 from gensim.models import Word2Vec
@@ -21,27 +19,13 @@ from scipy.stats import wasserstein_distance
 import seaborn as sns
 import wandb
 
-from hpw.s3_interaction import download_from_s3
 
-
-def load_local_pickled_artifact(local_path: Union[Path, str]):
-    with Path(local_path).open('rb') as fin:
-        return pickle.load(fin)
-
-
-@task(name='Load pickled artifact', task_run_name='Loading {artifact_filename}', retries=3, retry_delay_seconds=5, timeout_seconds=30)
-def load_pickled_artifact(artifact_filename):
-    if os.getenv('MODE') == 'cloud':
-        directory = os.environ['REMOTE_ARTIFACTS_DIR']
-        remote_path = Path(directory) / artifact_filename
-        local_path = download_from_s3(remote_path=remote_path)
-    else:
-        local_path = Path(os.environ['LOCAL_ARTIFACTS_DIR']) / artifact_filename
-    return load_local_pickled_artifact(local_path)
+JOB_TYPES = {'eval', 'train', 'tune'}
+RNG = np.random.RandomState(0)
 
 
 def get_model_kwargs(
-        model_name: Literal['word2vec', 'fasttext'],
+        model_name: Literal['word2vec', 'fasttext'] = 'word2vec',
         vector_size: int = 100,
         window: int = 5,
         min_count: int = 1,
@@ -51,6 +35,7 @@ def get_model_kwargs(
         workers: int = 4,
         compute_loss: bool = True,
         seed: int = 42,
+        **kwargs
 ):
     model_kwargs = dict(
         vector_size=vector_size,
@@ -68,9 +53,10 @@ def get_model_kwargs(
 
 
 @task(name='Create model')
-def create_model(model_name: Literal['word2vec', 'fasttext'], model_kwargs: dict):
+def create_model(config: dict):
+    model_name = config['model_name']
     model_class = Word2Vec if model_name == 'word2vec' else FastText
-    model_kwargs = get_model_kwargs(model_name, **model_kwargs)
+    model_kwargs = get_model_kwargs(**config)
     model = model_class(**model_kwargs)
     return model
 
@@ -92,24 +78,15 @@ def flatten_tokenized_data(hpo_to_tokens: Dict[str, List[List[str]]]):
     return tokenized_sentences, hpo_ids
 
 
-# @task(name='Split data into train and test')
-# def _train_test_split(dataset: List[List[List[str]]], test_size: float = 0.2):
-#     index_array = np.random.rand(len(dataset))
-#     train_dataset, test_dataset = [], []
-#     for index, entry in zip(index_array, dataset):
-#         if index <= test_size:
-#             test_dataset.append(entry)
-#         else:
-#             train_dataset.append(entry)
-#     return train_dataset, test_dataset
-
-
 def get_doc_vector(model, tokens):
     s = np.zeros(model.vector_size)
     n = 0
     for token in tokens:
         try:
-            v = model.wv[token]
+            try:
+                v = model.wv[token]
+            except AttributeError:  # The input is either model object or model.wv
+                v = model[token]
         except KeyError:
             continue
         s += v
@@ -180,12 +157,10 @@ def get_text_pairs(hpo_to_tokens: Dict[str, List[List[str]]], random_state=None)
     return synonym_pairs, non_synonym_pairs
 
 
-@flow(name='Calculate scores', log_prints=True)
 def calculate_scores_on_dataset(
         model,
         synonym_pairs,
-        non_synonym_pairs,
-        wandb_run=None
+        non_synonym_pairs
 ):
     print('Calculating distances')
     synonym_dist = get_pairwise_doc_distances(model, synonym_pairs)
@@ -196,48 +171,113 @@ def calculate_scores_on_dataset(
     print('Mean synonym pairwise distance:', mean_synonym_dist)
     print('Mean non-synonym pairwise distance:', mean_non_synonym_dist)
     print('Wasserstein distance between synonym and non-synonym pairwise distances:', wasserstein_dist)
-    if wandb_run:
-        wandb.log({
-            'Mean synonym pairwise distance': mean_synonym_dist,
-            'Mean non-synonym pairwise distance': mean_non_synonym_dist,
-            'Wasserstein distance': wasserstein_dist,
-        }, step=0)
+    wandb.log({
+        'Mean synonym pairwise distance': mean_synonym_dist,
+        'Mean non-synonym pairwise distance': mean_non_synonym_dist,
+        'Wasserstein distance': wasserstein_dist,
+    }, step=0)
     return synonym_dist, non_synonym_dist, wasserstein_dist
 
 
-@flow(name='Train model', log_prints=True)
-def train_model(dataset_name: str, model_name: Literal['word2vec', 'fasttext'], model_kwargs: dict, wandb_run=None):
-    dataset_name = f'tokens__stop_words=0__subwords=1.pkl'
-    hpo_to_tokens = load_pickled_artifact(dataset_name)
-    rng = np.random.RandomState(0)
-    sentences, _ = flatten_tokenized_data(hpo_to_tokens)
-    model = create_model(model_name, model_kwargs)
-    model.build_vocab(sentences)
-    model.train(sentences, total_examples=model.corpus_count, epochs=model.epochs)
-    synonym_dist, non_synonym_dist, wasserstein_dist = calculate_scores_on_dataset(model, hpo_to_tokens, rng, wandb_run)
-    if not wandb_run:
-        plot_distributions('test', synonym_dist, non_synonym_dist, wasserstein_dist)
+@task(name='Initialize W&B run')
+def init_run(job_type: Literal['tune', 'train', 'eval'], config: dict):
+    if wandb.run is None:
+        return wandb.init(
+            project=os.environ['WANDB_PROJECT'],
+            job_type=job_type,
+            config=config
+        )
+    return wandb.run
+
+
+@task(name='Download dataset')
+def download_artifact(artifact_type: Literal['dataset', 'model'], config: dict):
+    if artifact_type not in ['dataset', 'model']:
+        raise ValueError(f'artifact_type must be "dataset" or "model". Received {artifact_type}')
+    run = wandb.run
+    if artifact_type == 'dataset':
+        artifact_name = get_dataset_name_from_config(config)
     else:
-        api = wandb.Api()
-        sweep_id = f'{wandb_run.entity}/{wandb_run.project}/{wandb_run.sweep_id}'
-        sweep = api.sweep(sweep_id)
-        best_run = sweep.best_run()
-        if best_run.state != 'running':
-            print('*' * 50)
-            print(best_run.history()['Wasserstein distance'].iloc[0])
-            print('*' * 50)
-    return model
+        artifact_name = config['model_artifact_name']
+    full_artifact_name = f'{run.entity}/{run.project}/{artifact_name}:latest'
+    artifact = run.use_artifact(full_artifact_name, type=artifact_type)
+    download_directory = artifact.download()
+    return artifact_name, download_directory
+
+
+@task(name='Update best model file')
+def save_best_model(model, wasserstein_dist: float) -> Path | None:
+    run = wandb.run
+    sweep_id = f'{run.entity}/{run.project}/{run.sweep_id}'
+    api = wandb.Api()
+    sweep = api.sweep(sweep_id)
+    best_run = sweep.best_run()
+    update = False
+    if best_run.state == 'running':
+        update = True
+    elif best_run.history()['Wasserstein distance'].iloc[0] < wasserstein_dist:
+        update = True
+    if not update:
+        return
+    best_model_directory = Path(os.environ['LOCAL_ARTIFACTS_DIR']) / 'models'
+    best_model_directory.mkdir(parents=True, exist_ok=True)
+    best_model_path = best_model_directory / 'best_model.pkl'
+    with best_model_path.open('wb') as fout:
+        pickle.dump(model.wv, fout)
+    return best_model_path
+
+
+@task(name='Update best model artifact')
+def update_best_model_artifact(best_model_path: Path):
+    run = wandb.run
+    best_model = wandb.Artifact('best_model', type='model')
+    best_model.add_file(str(best_model_path))
+    run.log_artifact(best_model, aliases=['latest'])
+    run.link_artifact(best_model, 'model-registry/Best Tuned Model')
+
+
+@flow(name='Train model', log_prints=True)
+def model_flow(job_type: Literal['tune', 'train', 'eval'], config: dict):
+    if job_type not in JOB_TYPES:
+        raise ValueError(f'job_type must be "tune", "train", or "eval". Received: {job_type}.')
+    run = init_run(job_type, config)
+    dataset_name, dataset_directory = download_artifact('dataset', config)
+    with (Path(dataset_directory) / f'{dataset_name}.pkl').open('rb') as fin:
+        hpo_to_tokens = pickle.load(fin)
+    sentences, _ = flatten_tokenized_data(hpo_to_tokens)
+    if job_type == 'eval':
+        model_name, model_directory = download_artifact('model', config)
+        with (Path(model_directory) / f'{model_name}.pkl').open('rb') as fin:
+            model = pickle.load(fin)
+    else:
+        model = create_model(config)
+        model.build_vocab(sentences)
+        model.train(sentences, total_examples=model.corpus_count, epochs=model.epochs)
+    synonym_pairs, non_synonym_pairs = get_text_pairs(hpo_to_tokens, RNG)
+    synonym_dist, non_synonym_dist, wasserstein_dist = calculate_scores_on_dataset(model, synonym_pairs, non_synonym_pairs)
+    if job_type != 'tune':
+        return model, wasserstein_dist
+    if run.sweep_id is None:
+        raise RuntimeError(f'run.sweep_id is None, but if the job type is "tune", the job must run within a sweep.')
+    best_model_path = save_best_model(model, wasserstein_dist)
+    if best_model_path is not None:
+        update_best_model_artifact(best_model_path)
+    return model, wasserstein_dist
+
+
+def get_dataset_name_from_config(config: dict):
+    stop = config['use_stop_words']
+    split = config['split_into_subwords']
+    return f'tokens__stopwords_{int(stop)}__subwords_{int(split)}'
 
 
 def objective():
-    with wandb.init() as run:
+    with wandb.init():
         config = dict(wandb.config)
-        model_name = config['model_name']
-        del config['model_name']
-        train_model(model_name, config, run)
+        model_flow('tune', config)
 
 
-def tune():
+def tune(n_runs: int):
     sweep_configuration = {
         'method': 'grid',
         'metric':
@@ -247,25 +287,33 @@ def tune():
             },
         'parameters':
             {
-                # 'tokens__stop_words={int(stop)}__subwords={int(split)}'
                 'use_stop_words': {'values': [False, True]},
                 'split_into_subwords': {'values': [False, True]},
                 'model_name': {'values': ['word2vec', 'fasttext']},
                 'vector_size': {'values': [10, 25, 50, 75, 100]},
                 'window': {'values': [2, 3, 4, 5]},
                 'min_count': {'values': [1, 2, 3, 4, 5]},
-                # 'sg': {'values': [False, True]},
-                # 'hs': {'values': [False, True]},
-                # 'shrink_windows': {'values': [False, True]},
+                'sg': {'values': [False, True]},
+                'hs': {'values': [False, True]},
+                'shrink_windows': {'values': [False, True]},
             }
     }
     sweep_id = wandb.sweep(
         sweep=sweep_configuration,
-        project='hpo-test-3'
+        project=os.environ['WANDB_PROJECT']
     )
-    wandb.agent(sweep_id, function=objective, count=4)
+    _ = wandb.agent(sweep_id, function=objective, count=n_runs)
     return sweep_id
 
+
+# TODO
+"""
+[v] Saving best model locally to a pickle file
+[v] Saving dataset as a W&B artifact linked to a run
+[v] Saving best model as a W&B artifact linked to a run
+[v] Loading W&B model from a run
+[] Review Lambda deployment examples from weeks 3 and 6
+"""
 
 # def best_model_selection():
 #     sweep_id = tune()
